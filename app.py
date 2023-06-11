@@ -8,38 +8,40 @@ app.config['DATABASE'] = ':memory:'
 
 schema = {
     "type": "object",
-    "required": ["retailer", "purchaseDate", "purchaseTime", "items", "total"],
     "properties": {
         "retailer": {
-            "description": "The name of the retailer or store the receipt is from.",
-            "type": "string",
-            "pattern": "^\\S+$",
-            "example": "Target"
+        "type": "string"
         },
         "purchaseDate": {
-            "description": "The date of the purchase printed on the receipt.",
-            "type": "string",
-            "format": "date",
-            "example": "2022-01-01"
+        "type": "string",
+        "format": "date"
         },
         "purchaseTime": {
-            "description": "The time of the purchase printed on the receipt. 24-hour time expected.",
-            "type": "string",
-            "format": "time",
-            "example": "13:01"
+        "type": "string",
+        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
         },
         "items": {
-            "type": "array",
-            "minItems": 1,
-            "items": {"$ref": "#/components/schemas/Item"}
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+            "shortDescription": {
+                "type": "string"
+            },
+            "price": {
+                "type": "string",
+                "pattern": "^\\d+(\\.\\d{1,2})?$"
+            }
+            },
+            "required": ["shortDescription", "price"]
+        }
         },
         "total": {
-            "description": "The total amount paid on the receipt.",
-            "type": "string",
-            "pattern": "^\\d+\\.\\d{2}$",
-            "example": "6.49"
+        "type": "string",
+        "pattern": "^\\d+(\\.\\d{1,2})?$"
         }
-    }
+    },
+    "required": ["retailer", "purchaseDate", "purchaseTime", "items", "total"]
 }
 
 @app.route('/')
@@ -68,10 +70,10 @@ def count_alphanumeric(string):
 @app.route('/receipts/process', methods=['POST'])
 def process_receipt():
     data = request.get_json()
-    # try:
-    #     validate(data, schema)
-    # except:
-    #     return "The receipt is invalid", 400
+    try:
+        validate(data, schema)
+    except:
+        return "The receipt is invalid", 400
     id = str(uuid.uuid4())
     points = calculate_points(data)
     db = get_db()
@@ -79,5 +81,13 @@ def process_receipt():
     cursor.execute("INSERT INTO receipts (id, points) VALUES (?, ?)", (id, points))
     return jsonify({"id": id}), 200
 
+@app.route('/receipts/<uuid:id>/points', methods=['GET'])
+def get_points(id):
+    db = get_db()
+    cursor = db.cursor()
+    res = cursor.execute("SELECT * FROM receipts WHERE id = ?", (str(id),))
+    row = res.fetchone()
+    return jsonify({"points": row[1]}), 200
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(port=8000, debug=True)
